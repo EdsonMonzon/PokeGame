@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mesa TCG 3 Reyes - Multijugador P2P</title>
+    <!-- Librería PeerJS para conectar 2 navegadores directamente -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --bg: #121218;
+            --panel: #1e1e28;
+            --accent: #e74c3c;
+            --card-w: 130px;
+            --card-h: 180px;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg);
+            color: #fff;
+            margin: 0;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            user-select: none;
+        }
+
+        #deckbuilder-screen {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            background: var(--panel);
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 900px;
+            margin: 0 auto;
+            box-sizing: border-box;
+            width: 100%;
+        }
+
+        .builder-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .db-catalog, .deck-preview {
+            background: #15151c;
+            padding: 10px;
+            border-radius: 6px;
+            max-height: 50vh;
+            overflow-y: auto;
+            border: 1px solid #333;
+        }
+
+        .catalog-item, .deck-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #222230;
+            padding: 6px 10px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        #game-board-screen {
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        header {
+            background: var(--panel);
+            padding: 10px 15px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        .controls-bar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        .btn:hover { background: #2980b9; }
+        .btn-success { background: #2ecc71; }
+        .btn-success:hover { background: #27ae60; }
+        .btn-danger { background: #e74c3c; }
+        .btn-dice { background: #9b59b6; font-size: 14px; }
+
+        .player-board {
+            background: var(--panel);
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            border: 1px solid #333;
+        }
+
+        .stats-bar {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            background: #14141c;
+            padding: 8px 15px;
+            border-radius: 6px;
+        }
+
+        .counter-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .counter-btn {
+            width: 22px;
+            height: 22px;
+            border: none;
+            background: #444;
+            color: white;
+            border-radius: 3px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .zone-title {
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .cards-container {
+            display: flex;
+            gap: 10px;
+            min-height: calc(var(--card-h) + 10px);
+            background: #12121a;
+            padding: 10px;
+            border-radius: 6px;
+            overflow-x: auto;
+            align-items: center;
+            border: 1px dashed #333;
+        }
+
+        .card {
+            width: var(--card-w);
+            height: var(--card-h);
+            background: #2a2a3a;
+            border: 2px solid #555;
+            border-radius: 8px;
+            padding: 6px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            font-size: 10px;
+            flex-shrink: 0;
+            position: relative;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+        .card.tapped {
+            transform: rotate(90deg);
+            opacity: 0.7;
+        }
+
+        .card-header { font-weight: bold; font-size: 11px; color: #f1c40f; }
+        .card-info { background: #1a1a24; padding: 3px; border-radius: 4px; font-size: 9px; }
+        .card-spell { background: #333346; padding: 4px; border-radius: 4px; font-size: 9px; line-height: 1.2; overflow-y: auto; max-height: 60px;}
+
+        .card-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2px;
+            margin-top: 4px;
+        }
+        .card-btn {
+            background: #444;
+            color: white;
+            border: none;
+            padding: 3px;
+            font-size: 8px;
+            border-radius: 2px;
+            cursor: pointer;
+        }
+        .card-btn:hover { background: #666; }
+
+        .connection-status {
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .status-off { background: #7f8c8d; }
+        .status-on { background: #2ecc71; }
+    </style>
+</head>
+<body>
+
+<!-- PANTALLA 1: CONSTRUCTOR DE MAZOS -->
+<div id="deckbuilder-screen">
+    <h2>🛠️ Creador de Mazos (Máx. 60 cartas | 4 copias por carta)</h2>
+    <div style="display:flex; justify-content:space-between; align-items:center; background:#181822; padding:10px; border-radius:6px;">
+        <div>
+            <strong>Rol Asignado: </strong>
+            <span id="player-role-badge" style="color:#f1c40f; font-weight:bold;">Conectando...</span>
+        </div>
+        <div>
+            <span id="deck-counter" style="font-weight:bold; font-size:14px; color:#2ecc71;">0 / 60 cartas</span>
+        </div>
+        <div style="display:flex; gap:10px;">
+            <button class="btn" onclick="rellenarMazoAutomatico()">⚡ Relleno Automático</button>
+
+            <button class="btn btn-success" id="btn-start" onclick="listoParaJugar()" disabled>✔️ Mazo Listo</button>
+        </div>
+    </div>
+
+    <div class="builder-layout">
+        <div>
+            <h4>Catálogo de Cartas Disponibles</h4>
+            <div class="db-catalog" id="builder-catalog"></div>
+        </div>
+        <div>
+            <h4>Tu Mazo Actual</h4>
+            <div class="deck-preview" id="builder-preview"></div>
+        </div>
+    </div>
+</div>
+
+<!-- PANTALLA 2: MESA DE JUEGO MULTIJUGADOR -->
+<div id="game-board-screen">
+    <header>
+        <h2>🎲 Mesa Sandbox Pokémon TCG (3 Reyes)</h2>
+        <div class="controls-bar">
+            <span id="net-status" class="connection-status status-off">Esperando Rival...</span>
+            <button class="btn" onclick="copiarLinkSala()">🔗 Copiar Link de la Sala</button>
+            <button class="btn btn-dice" onclick="lanzaDado()">🎲 Dado: <span id="dice-val">-</span></button>
+        </div>
+    </header>
+
+    <!-- RIVAL (OPONENTE) -->
+    <div class="player-board">
+        <div class="stats-bar">
+            <strong id="rival-title">Rival</strong>
+            <div class="counter-group">
+                <span>❤️ Vida:</span>
+                <span id="rival-hp">15</span>
+            </div>
+            <div class="counter-group">
+                <span>⚡ Maná:</span>
+                <span id="rival-mana">0</span>
+            </div>
+            <span>🃏 Cartas en Mazo: <span id="rival-deck-count">0</span></span>
+        </div>
+        <div class="zone-title">Campo / Mesa del Rival</div>
+        <div class="cards-container" id="rival-bench"></div>
+        <div class="zone-title">Mano del Rival (<span id="rival-hand-count">0</span> cartas)</div>
+        <div class="cards-container" id="rival-hand-hidden" style="min-height:50px;"></div>
+    </div>
+
+    <hr style="border-color: #333; margin: 5px 0;">
+
+    <!-- JUGADOR LOCAL (TÚ) -->
+    <div class="player-board">
+        <div class="stats-bar">
+            <strong id="local-title">Tu Mesa</strong>
+            <div class="counter-group">
+                <span>❤️ Vida:</span>
+                <button class="counter-btn" onclick="adjVal('local-hp', -1)">-</button>
+                <span id="local-hp">15</span>
+                <button class="counter-btn" onclick="adjVal('local-hp', 1)">+</button>
+            </div>
+            <div class="counter-group">
+                <span>⚡ Maná:</span>
+                <button class="counter-btn" onclick="adjVal('local-mana', -1)">-</button>
+                <span id="local-mana">0</span>
+                <button class="counter-btn" onclick="adjVal('local-mana', 1)">+</button>
+            </div>
+            <button class="btn" onclick="robarCarta()">🃏 Robar Carta (<span id="local-deck-count">0</span>)</button>
+        </div>
+        <div class="zone-title">Tu Campo / Mesa</div>
+        <div class="cards-container" id="local-bench"></div>
+        <div class="zone-title">Tu Mano</div>
+        <div class="cards-container" id="local-hand"></div>
+    </div>
+</div>
+
+<script>
+const DB = [
+    { id: "001", name: "Bulbasaur", stats: "3/4", gen: "1P", evo: "Gratis", cost: "2P", spell: "absorber, cura 2 a un aliado y envenena a un enemigo" },
+    { id: "002", name: "Ivysaur", stats: "5/6", gen: "2P", evo: "2P", cost: "3P", spell: "megaagotar, cura 3 a un aliado y envenena a un enemigo" },
+    { id: "003", name: "Venusaur", stats: "7/9", gen: "3P", evo: "4P", cost: "5P", spell: "gigadrenado, cura 4 a un aliado y envenena a un enemigo" },
+    { id: "004", name: "Charmander", stats: "5/3", gen: "1F", evo: "Gratis", cost: "2F", spell: "ascuas, 2 de daño a un pokemon enemigo, lo quema si el dado da 4 o 5" },
+    { id: "005", name: "Charmeleon", stats: "6/6", gen: "2F", evo: "2F", cost: "4F", spell: "pirotecnia, 3 de daño a un pokemon enemigo, 1 de daño a todos los demas" },
+    { id: "006", name: "Charizard", stats: "8/9", gen: "3F", evo: "4F", cost: "6F", spell: "lanzallamas, 4 de daño a todos los pokemon enemigos" },
+    { id: "007", name: "Squirtle", stats: "3/4", gen: "1A", evo: "Gratis", cost: "2A", spell: "rayo burbujas, roba 1" },
+    { id: "008", name: "Wartortle", stats: "5/6", gen: "2A", evo: "2A", cost: "3A", spell: "chorro de agua, roba 2" },
+    { id: "009", name: "Blastoise", stats: "7/9", gen: "3A", evo: "4A", cost: "5A", spell: "hidrocañon, roba 3" },
+    { id: "010", name: "Caterpie", stats: "2/3", gen: "1B", evo: "Gratis", cost: "1B", spell: "disparo demora, ralentiza al enemigo" },
+    { id: "025", name: "Pikachu", stats: "4/3", gen: "1E", evo: "Gratis", cost: "1E", spell: "atactrueno, descarta 1 carta y roba 1 carta" },
+    { id: "026", name: "Raichu", stats: "7/6", gen: "2E", evo: "3E", cost: "4E", spell: "electrobola, descarta tu mano y roba 4 cartas" },
+    { id: "063", name: "Abra", stats: "2/2", gen: "1S", evo: "Gratis", cost: "2S", spell: "teletransportacion, devuelve un pokemon tuyo a tu mano en cualquier momento" },
+    { id: "130", name: "Gyarados", stats: "9/9", gen: "3A", evo: "3A2N", cost: "3A2N", spell: "cascada, hace 3 de daño a cada pokemon enemigo y roba 1 por cada pokemon afectado" },
+    { id: "144", name: "Articuno", stats: "8/9", gen: "3A", evo: "Gratis", cost: "5A", spell: "frio eterno, congelo a un pokemon enemigo, si solo tiene 1 pokemon congelo a todos" },
+    { id: "150", name: "Mewtwo", stats: "9/8", gen: "3S", evo: "Gratis", cost: "5S", spell: "psiquico, le da a un pokemon, ahora juegas viendo al mano del rival" },
+    { id: "152", name: "Pocion", stats: "-", gen: "-", evo: "-", cost: "1N", spell: "cura 3 a un pokemon aliado" }
+];
+
+let myPlayerNum = 1; 
+let myDeck = [];
+let peer = null;
+let conn = null;
+
+let localState = { hp: 15, mana: 0, deck: [], hand: [], bench: [] };
+let rivalState = { hp: 15, mana: 0, deckCount: 0, handCount: 0, bench: [] };
+
+// INICIALIZAR RED MULTIJUGADOR
+function initNet() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const room = urlParams.get('sala');
+
+    if(room) {
+        myPlayerNum = 2;
+        document.getElementById("player-role-badge").innerText = "Jugador 2 (Inquilino)";
+        peer = new Peer();
+        peer.on('open', () => {
+            conn = peer.connect(room);
+            setupConn();
+        });
+    } else {
+        myPlayerNum = 1;
+        document.getElementById("player-role-badge").innerText = "Jugador 1 (Anfitrión)";
+        const myRoomId = "3reyes-" + Math.floor(1000 + Math.random() * 9000);
+        peer = new Peer(myRoomId);
+        peer.on('open', id => {
+            history.replaceState(null, "", "?sala=" + id);
+        });
+        peer.on('connection', c => {
+            conn = c;
+            setupConn();
+        });
+    }
+}
+
+function setupConn() {
+    conn.on('open', () => {
+        document.getElementById("net-status").innerText = "🟢 Rival Conectado";
+        document.getElementById("net-status").className = "connection-status status-on";
+        syncState();
+    });
+    conn.on('data', data => {
+        if(data.type === 'SYNC') {
+            rivalState = data.state;
+            renderGame();
+        } else if(data.type === 'DICE') {
+            document.getElementById("dice-val").innerText = data.val;
+        }
+    });
+}
+
+function syncState() {
+    if(conn && conn.open) {
+        conn.send({
+            type: 'SYNC',
+            state: {
+                hp: localState.hp,
+                mana: localState.mana,
+                deckCount: localState.deck.length,
+                handCount: localState.hand.length,
+                bench: localState.bench
+            }
+        });
+    }
+    renderGame();
+}
+
+function copiarLinkSala() {
+    navigator.clipboard.writeText(window.location.href);
+    alert("¡Enlace de la sala copiado! Mándaselo a tu amigo para jugar.");
+}
+
+// LÓGICA DE CONSTRUCCIÓN DE MAZO
+function renderCatalog() {
+    const catalogEl = document.getElementById("builder-catalog");
+    catalogEl.innerHTML = DB.map(card => {
+        const count = myDeck.filter(c => c.id === card.id).length;
+        return `
+            <div class="catalog-item">
+                <span><strong>#${card.id}</strong> ${card.name} (${count}/4)</span>
+                <button class="btn" onclick="agregarAlMazo('${card.id}')" ${count >= 4 ? 'disabled style="opacity:0.5"' : ''}>+ Añadir</button>
+            </div>
+        `;
+    }).join("");
+}
+
+function renderPreview() {
+    const previewEl = document.getElementById("builder-preview");
+    document.getElementById("deck-counter").innerText = `${myDeck.length} / 60 cartas`;
+    document.getElementById("btn-start").disabled = myDeck.length !== 60;
+
+    previewEl.innerHTML = myDeck.map((c, index) => `
+        <div class="deck-item">
+            <span><strong>#${c.id}</strong> ${c.name}</span>
+            <button class="btn btn-danger" style="padding:2px 6px; font-size:10px;" onclick="quitarDelMazo(${index})">X</button>
+        </div>
+    `).join("");
+}
+
+function agregarAlMazo(cardId) {
+    const count = myDeck.filter(c => c.id === cardId).length;
+    if(myDeck.length < 60 && count < 4) {
+        const item = DB.find(c => c.id === cardId);
+        myDeck.push({...item, instanceId: Math.random(), damage: 0, tapped: false});
+        renderCatalog();
+        renderPreview();
+    }
+}
+
+function quitarDelMazo(index) {
+    myDeck.splice(index, 1);
+    renderCatalog();
+    renderPreview();
+}
+
+function rellenarMazoAutomatico() {
+    while(myDeck.length < 60) {
+        const randomCard = DB[Math.floor(Math.random() * DB.length)];
+        const count = myDeck.filter(c => c.id === randomCard.id).length;
+        if(count < 4) myDeck.push({...randomCard, instanceId: Math.random(), damage: 0, tapped: false});
+    }
+    renderCatalog();
+    renderPreview();
+}
+
+function listoParaJugar() {
+    localState.deck = [...myDeck].sort(() => Math.random() - 0.5);
+    document.getElementById("deckbuilder-screen").style.display = "none";
+    document.getElementById("game-board-screen").style.display = "flex";
+    document.getElementById("local-title").innerText = `Tú (Jugador ${myPlayerNum})`;
+    document.getElementById("rival-title").innerText = `Rival (Jugador ${myPlayerNum === 1 ? 2 : 1})`;
+    syncState();
+}
+
+// ACCIONES DE MESA EN TIEMPO REAL
+function lanzaDado() {
+    const val = Math.floor(Math.random() * 6) + 1;
+    document.getElementById("dice-val").innerText = val;
+    if(conn && conn.open) conn.send({ type: 'DICE', val: val });
+}
+
+function adjVal(id, delta) {
+    if(id === 'local-hp') localState.hp = Math.max(0, localState.hp + delta);
+    if(id === 'local-mana') localState.mana = Math.max(0, localState.mana + delta);
+    syncState();
+}
+
+function robarCarta() {
+    if(localState.deck.length > 0) {
+        localState.hand.push(localState.deck.pop());
+        syncState();
+    } else {
+        alert("¡No quedan cartas en tu mazo!");
+    }
+}
+
+function mover(from, to, index) {
+    const card = localState[from].splice(index, 1)[0];
+    localState[to].push(card);
+    syncState();
+}
+
+function descartar(from, index) {
+    localState[from].splice(index, 1);
+    syncState();
+}
+
+function toggleTap(zone, index) {
+    localState[zone][index].tapped = !localState[zone][index].tapped;
+    syncState();
+}
+
+function adjDmg(zone, index, delta) {
+    localState[zone][index].damage = Math.max(0, (localState[zone][index].damage || 0) + delta);
+    syncState();
+}
+
+function renderCard(c, i, zone, isLocal) {
+    return `
+        <div class="card ${c.tapped ? 'tapped' : ''}">
+            <div class="card-header">#${c.id} ${c.name}</div>
+            <div class="card-info">
+                <strong>Stats:</strong> ${c.stats} | <strong>Gen:</strong> ${c.gen}<br>
+                <strong>Evo:</strong> ${c.evo} | <strong>Hechizo:</strong> ${c.cost}
+            </div>
+            <div class="card-spell">${c.spell}</div>
+            ${zone === 'bench' ? `<div style="color:#e74c3c; font-weight:bold; font-size:10px;">💥 Daño: ${c.damage || 0}</div>` : ''}
+            ${isLocal ? `
+                <div class="card-controls">
+                    ${zone === 'hand' ? `<button class="card-btn" onclick="mover('hand', 'bench', ${i})">➡️ Mesa</button>` : `<button class="card-btn" onclick="mover('bench', 'hand', ${i})">⬅️ Mano</button>`}
+                    <button class="card-btn" onclick="toggleTap('${zone}',${i})">🔄 Girar</button>
+                    ${zone === 'bench' ? `
+                        <button class="card-btn" onclick="adjDmg('${zone}', ${i}, 1)">+1 Daño</button>
+                        <button class="card-btn" onclick="adjDmg('${zone}', ${i}, -1)">-1 Daño</button>
+                    ` : ''}
+                    <button class="card-btn" style="background:#e74c3c;" onclick="descartar('${zone}',${i})">🗑️ Tirar</button>
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+function renderGame() {
+    // Renderear Local
+    document.getElementById("local-hp").innerText = localState.hp;
+    document.getElementById("local-mana").innerText = localState.mana;
+    document.getElementById("local-deck-count").innerText = localState.deck.length;
+    document.getElementById("local-hand").innerHTML = localState.hand.map((c, i) => renderCard(c, i, 'hand', true)).join("");
+    document.getElementById("local-bench").innerHTML = localState.bench.map((c, i) => renderCard(c, i, 'bench', true)).join("");
+
+    // Renderear Rival
+    document.getElementById("rival-hp").innerText = rivalState.hp;
+    document.getElementById("rival-mana").innerText = rivalState.mana;
+    document.getElementById("rival-deck-count").innerText = rivalState.deckCount;
+    document.getElementById("rival-hand-count").innerText = rivalState.handCount;
+    document.getElementById("rival-bench").innerHTML = (rivalState.bench || []).map((c, i) => renderCard(c, i, 'bench', false)).join("");
+    
+    // Cartas de mano del rival ocultas
+    let hiddenHTML = "";
+    for(let i = 0; i < rivalState.handCount; i++) {
+        hiddenHTML += `<div class="card" style="background:#444; justify-content:center; align-items:center; font-weight:bold;">🎴 Pokémon</div>`;
+    }
+    document.getElementById("rival-hand-hidden").innerHTML = hiddenHTML;
+}
+
+renderCatalog();
+renderPreview();
+initNet();
+</script>
+</body>
+</html>
